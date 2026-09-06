@@ -1,0 +1,4 @@
+<?php
+
+// Theme bootstrap file for "{{ name }}".
+// Register view composers, bindings, or Blade components here.

@@ -2,67 +2,63 @@
 
 return [
 
-	/*
-	|--------------------------------------------------------------------------
-	| Default Active Theme
-	|--------------------------------------------------------------------------
-	|
-	| Assign the default active theme to be used if one is not set during
-	| runtime. This is especially useful if you're developing a very basic
-	| application that does not require dynamically changing the theme.
-	|
-	*/
+    /*
+    |--------------------------------------------------------------------------
+    | Default Active Theme
+    |--------------------------------------------------------------------------
+    */
 
-	'active' => 'bootstrap',
+    'active' => env('THEME_ACTIVE'),
 
-	/*
-	|--------------------------------------------------------------------------
-	| Theme Paths
-	|--------------------------------------------------------------------------
-	|
-	*/
+    'active_resolver' => null,
 
-	'paths' => [
+    'boot_file' => 'functions.php',
 
-		/*
-		|----------------------------------------------------------------------
-		| Absolute Path
-		|----------------------------------------------------------------------
-		|
-		| Define the absolute path where you'd like to store your themes. Note
-		| that if you choose a path that's outside of your public directory, you
-		| will still need to store your assets within your public directory.
-		|
-		*/
+    /*
+    |--------------------------------------------------------------------------
+    | Manifest Caching
+    |--------------------------------------------------------------------------
+    |
+    | cache_manifest enables in-memory caching for the current request.
+    | manifest_cache_store enables persistent cache (file, redis, etc.).
+    |
+    */
 
-		'absolute' => public_path('themes'),
+    'cache_manifest' => true,
 
-		/*
-		|----------------------------------------------------------------------
-		| Base Path
-		|----------------------------------------------------------------------
-		|
-		| Define the base path where your themes will be publically available.
-		| This is used to generate the correct URL when utilizing both the
-		| asset() and secureAsset() methods.
-		|
-		*/
+    'manifest_cache_store' => env('THEME_MANIFEST_CACHE_STORE'),
 
-		'base' => 'themes',
+    'manifest_cache_ttl' => (int) env('THEME_MANIFEST_CACHE_TTL', 3600),
 
-		/*
-		|----------------------------------------------------------------------
-		| Assets Path
-		|----------------------------------------------------------------------
-		|
-		| Define the path that will store all assets for each of your themes.
-		| This is used to generate the correct URL when utilizing both the
-		| asset() and secureAsset() methods.
-		|
-		*/
+    'manifest_cache_key' => 'rawbinn.themes.manifest',
 
-		'assets' => 'assets',
+    'middleware_alias' => 'theme',
 
-	]
+    /*
+    |--------------------------------------------------------------------------
+    | Vite / Mix
+    |--------------------------------------------------------------------------
+    */
+
+    'vite' => [
+        'build_directory' => 'build',
+        'hot_file' => 'theme.hot',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Theme Paths
+    |--------------------------------------------------------------------------
+    */
+
+    'paths' => [
+
+        'absolute' => public_path('themes'),
+
+        'base' => 'themes',
+
+        'assets' => 'assets',
+
+    ],
 
 ];

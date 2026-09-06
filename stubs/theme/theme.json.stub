@@ -1,0 +1,12 @@
+{
+    "slug": "{{ slug }}",
+    "name": "{{ name }}",
+    "author": "{{ author }}",
+    "description": "A custom Laravel theme.",
+    "version": "{{ version }}",
+    "parent": {{ parent }},
+    "vite": {
+        "build_directory": "build",
+        "hot_file": "theme.hot"
+    }
+}

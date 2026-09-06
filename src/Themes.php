@@ -2,455 +2,366 @@
 
 namespace Rawbinn\Themes;
 
-use URL;
-use Rawbinn\Themes\Exceptions\FileMissingException;
 use Illuminate\Config\Repository;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\Response;
+use Illuminate\Support\Arr;
 use Illuminate\View\Factory as ViewFactory;
+use Illuminate\View\View;
+use Rawbinn\Themes\Assets\ThemeAssetResolver;
+use Rawbinn\Themes\Events\ThemeActivated;
+use Rawbinn\Themes\Events\ThemeBooted;
+use Rawbinn\Themes\Events\ThemeRegistered;
+use Rawbinn\Themes\Exceptions\FileMissingException;
+use Rawbinn\Themes\Exceptions\ThemeNotFoundException;
+use Rawbinn\Themes\Manifest\ThemeManifest;
+use Rawbinn\Themes\Support\ThemeRegistry;
+use Rawbinn\Themes\View\ThemeViewResolver;
 
 class Themes
 {
-	/**
-	 * @var string
-	 */
-	protected $active;
-
-	/**
-	 * @var Repository
-	 */
-	protected $config;
-
-	/**
-	 * @var Filesystem
-	 */
-	protected $files;
-
-	/**
-	 * @var string
-	 */
-	protected $layout;
-
-	/**
-	 * @var string
-	 */
-	protected $path;
-
-	/**
-	 * @var View
-	 */
-	protected $viewFactory;
-
-	/**
-	 * Constructor method.
-	 *
-	 * @param Filesystem  $files
-	 * @param Repository  $config
-	 * @param ViewFactory $viewFactory
-	 */
-	public function __construct(Filesystem $files, Repository $config, ViewFactory $viewFactory)
-	{
-		$this->config      = $config;
-		$this->files       = $files;
-		$this->viewFactory = $viewFactory;
-	}
-
-	/**
-	 * Register custom namespaces for all themes.
-	 *
-	 * @return null
-	 */
-	public function register()
-	{
-		foreach ($this->all() as $theme) {
-			$this->registerNamespace($theme);
-		}
-	}
-
-	/**
-	 * Register custom namespaces for specified theme.
-	 *
-	 * @param string $theme
-	 * @return null
-	 */
-	public function registerNamespace($theme)
-	{
-		$this->viewFactory->addNamespace($theme, $this->getThemePath($theme).'views');
-	}
-
-	/**
-	 * Get all themes.
-	 *
-	 * @return Collection
-	 */
-	public function all()
-	{
-		$themes = [];
-
-		if ($this->files->exists($this->getPath())) {
-			$scannedThemes = $this->files->directories($this->getPath());
-
-			foreach ($scannedThemes as $theme) {
-				$themes[] = basename($theme);
-			}
-		}
-
-		return new Collection($themes);
-	}
-
-	/**
-	 * Check if given theme exists.
-	 *
-	 * @param  string $theme
-	 * @return bool
-	 */
-	public function exists($theme)
-	{
-		return in_array($theme, $this->all()->toArray());
-	}
-
-	/**
-	 * Gets themes path.
-	 *
-	 * @return string
-	 */
-	public function getPath()
-	{
-		return $this->path ?: $this->config->get('themes.paths.absolute');
-	}
-
-	/**
-	 * Sets themes path.
-	 *
-	 * @param string $path
-	 * @return self
-	 */
-	public function setPath($path)
-	{
-		$this->path = $path;
-
-		return $this;
-	}
-
-	/**
-	 * Gets active theme.
-	 *
-	 * @return string
-	 */
-	public function getActive()
-	{
-		return $this->active ?: $this->config->get('themes.active');
-	}
-
-	/**
-	 * Sets active theme.
-	 *
-	 * @return Themes
-	 */
-	public function setActive($theme)
-	{
-		$this->active = $theme;
-
-		return $this;
-	}
-
-	/**
-	 * Get theme layout.
-	 *
-	 * @return string
-	 */
-	public function getLayout()
-	{
-		return $this->layout;
-	}
-
-	/**
-	 * Sets theme layout.
-	 *
-	 * @return Themes
-	 */
-	public function setLayout($layout)
-	{
-		$this->layout = $this->getView($layout);
-
-		return $this;
-	}
-
-	/**
-	 * Gets the given view file.
-	 *
-	 * @param  string  $view
-	 * @return string|null
-	 */
-	public function getView($view)
-	{
-		$activeTheme = $this->getActive();
-		$parent      = $this->getProperty($activeTheme.'::parent');
-
-		$views = [
-			'theme'  => $this->getThemeNamespace($view),
-			'parent' => $this->getThemeNamespace($view, $parent),
-			'base'   => $view
-		];
-		$root_view = $view;
-		foreach ($views as $view) {
-
-			if ($this->viewFactory->exists($view)) {
-				return $view;
-			}
-			else{
-				return $root_view;
-			}
-		}
-
-		return false;
-	}
-
-	/**
-	 * Render theme view file.
-	 *
-	 * @param string $view
-	 * @param array $data
-	 * @return View
-	 */
-	public function view($view, $data = array())
-	{
-		if (! is_null($this->layout)) {
-			$data['theme_layout'] = $this->getLayout();
-		}
-
-		return $this->viewFactory->make($this->getView($view), $data);
-	}
-
-	/**
-	 * Checks if the given view file exists (anywhere).
-	 *
-	 * @param  string  $view
-	 * @return bool
-	 */
-	public function viewExists($view)
-	{
-		return ($this->getView($view)) ? true : false;
-	}
-
-	/**
-	 * Return a new theme view response from the application.
-	 *
-	 * @param  string  $view
-	 * @param  array   $data
-	 * @param  int     $status
-	 * @param  array   $headers
-	 * @return \Symfony\Component\HttpFoundation\Response
-	 */
-	public function response($view, $data = array(), $status = 200, array $headers = array())
-	{
-		return new Response($this->view($view, $data), $status, $headers);
-	}
-
-	/**
-	 * Gets the specified themes path.
-	 *
-	 * @param string $theme
-	 * @return string
-	 */
-	public function getThemePath($theme)
-	{
-		return $this->getPath()."/{$theme}/";
-	}
-
-	/**
-	 * Get path of theme function JSON file.
-	 *
-	 * @param  string $theme
-	 * @return string
-	 */
-	public function getThemeFunctionPath($theme)
-	{
-		return $this->getThemePath($theme).'/functions.json';
-	}
-
-	/**
-	 * Get theme function JSON content as an array.
-	 *
-	 * @param  string $theme
-	 * @return array|mixed
-	 */
-	public function getFunctionJsonContents($theme)
-	{
-		$theme = strtolower($theme);
-
-		$default = [];
-
-		if ( ! $this->exists($theme))
-			return $default;
-
-		$path = $this->getThemeFunctionPath($theme);
-
-		if ($this->files->exists($path)) {
-			$contents = $this->files->get($path);
-
-			return json_decode($contents, true);
-		} else {
-			$message = "Theme [{$theme}] must have a valid functions.json manifest file.";
-
-			throw new FileMissingException($message);
-		}
-	}
-
-	/**
-	 * Get a theme functions property value.
-	 *
-	 * @param  string      $property
-	 * @param  null|string $default
-	 * @return mixed
-	 */
-	public function getFunctionProperty($theme, $key = null, $default = null)
-	{
-		return array_get($this->getFunctionJsonContents($theme), $key, $default);
-	}
-
-	/**
-	 * Get path of theme JSON file.
-	 *
-	 * @param  string $theme
-	 * @return string
-	 */
-	public function getJsonPath($theme)
-	{
-		return $this->getThemePath($theme).'/theme.json';
-	}
-
-	/**
-	 * Get theme JSON content as an array.
-	 *
-	 * @param  string $theme
-	 * @return array|mixed
-	 */
-	public function getJsonContents($theme)
-	{
-		$theme = strtolower($theme);
-
-		$default = [];
-
-		if ( ! $this->exists($theme))
-			return $default;
-
-		$path = $this->getJsonPath($theme);
-
-		if ($this->files->exists($path)) {
-			$contents = $this->files->get($path);
-
-			return json_decode($contents, true);
-		} else {
-			$message = "Theme [{$theme}] must have a valid theme.json manifest file.";
-
-			throw new FileMissingException($message);
-		}
-	}
-
-	/**
-	 * Set theme manifest JSON content property value.
-	 *
-	 * @param  string $theme
-	 * @param  array  $content
-	 * @return integer
-	 */
-	public function setJsonContents($theme, array $content)
-	{
-		$content = json_encode($content, JSON_PRETTY_PRINT);
-
-		return $this->files->put($this->getJsonPath($theme), $content);
-	}
-
-	/**
-	 * Get a theme manifest property value.
-	 *
-	 * @param  string      $property
-	 * @param  null|string $default
-	 * @return mixed
-	 */
-	public function getProperty($property, $default = null)
-	{
-		list($theme, $key) = explode('::', $property);
-
-		return array_get($this->getJsonContents($theme), $key, $default);
-	}
-
-	/**
-	 * Set a theme manifest property value.
-	 *
-	 * @param  string $property
-	 * @param  mixed  $value
-	 * @return bool
-	 */
-	public function setProperty($property, $value)
-	{
-		list($theme, $key) = explode('::', $property);
-
-		$content = $this->getJsonContents($theme);
-
-		if (count($content)) {
-			if (isset($content[$key])) {
-				unset($content[$key]);
-			}
-
-			$content[$key] = $value;
-
-			$this->setJsonContents($theme, $content);
-
-			return true;
-		}
-
-		return false;
-	}
-
-	/**
-	 * Generate a HTML link to the given asset using HTTP for the
-	 * currently active theme.
-	 *
-	 * @return string
-	 */
-	public function asset($asset)
-	{
-		$segments = explode('::', $asset);
-		$theme    = null;
-
-		if (count($segments) == 2) {
-			list($theme, $asset) = $segments;
-		} else {
-			$asset = $segments[0];
-		}
-
-		return url($this->config->get('themes.paths.base').'/'
-			.($theme ?: $this->getActive()).'/'
-			.$this->config->get('themes.paths.assets').'/'
-			.$asset);
-	}
-
-	/**
-	 * Generate a HTML link to the given asset using HTTPS for the
-	 * currently active theme.
-	 *
-	 * @return string
-	 */
-	public function secureAsset($asset)
-	{
-		return preg_replace("/^http:/i", "https:", $this->asset($asset));
-	}
-
-	/**
-	 * Get the specified themes View namespace.
-	 *
-	 * @param string $key
-	 * @return string
-	 */
-	protected function getThemeNamespace($key, $theme = null)
-	{
-		if (is_null($theme)) {
-			return $this->getActive()."::{$key}";
-		} else {
-			return $theme."::{$key}";
-		}
-	}
+    protected ?string $active = null;
+
+    protected ?string $layout = null;
+
+    /**
+     * @var array<string, bool>
+     */
+    protected array $bootedThemes = [];
+
+    protected ThemeViewResolver $viewResolver;
+
+    protected ThemeAssetResolver $assetResolver;
+
+    public function __construct(
+        protected ThemeRegistry $registry,
+        protected ThemeManifest $manifest,
+        protected Filesystem $files,
+        protected Repository $config,
+        protected ViewFactory $viewFactory,
+        protected ?Dispatcher $events = null,
+    ) {
+        $this->viewResolver = new ThemeViewResolver(
+            $this->viewFactory,
+            $this->manifest,
+            fn () => $this->getActive(),
+        );
+
+        $this->assetResolver = new ThemeAssetResolver(
+            $this->config,
+            $this->files,
+            $this->registry,
+            $this->manifest,
+            fn () => $this->getActive(),
+        );
+    }
+
+    public function flushState(): void
+    {
+        $this->active = null;
+        $this->layout = null;
+        $this->bootedThemes = [];
+        $this->manifest->flushRuntimeCache();
+    }
+
+    public function register(): void
+    {
+        foreach ($this->registry->all() as $theme) {
+            $this->registerNamespace($theme);
+        }
+    }
+
+    public function registerNamespace(string $theme): void
+    {
+        $viewsPath = $this->registry->getViewsPath($theme);
+
+        if ($this->files->isDirectory($viewsPath)) {
+            $this->viewFactory->addNamespace($theme, $viewsPath);
+            $this->dispatch(new ThemeRegistered($theme));
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function all(): array
+    {
+        return $this->registry->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function allValid(): array
+    {
+        return $this->registry->allValid();
+    }
+
+    public function exists(string $theme): bool
+    {
+        return $this->registry->exists($theme);
+    }
+
+    public function isValid(string $theme): bool
+    {
+        return $this->registry->isValid($theme);
+    }
+
+    public function getPath(): string
+    {
+        return $this->registry->getPath();
+    }
+
+    public function setPath(string $path): self
+    {
+        $this->registry->setPath($path);
+
+        return $this;
+    }
+
+    public function getActive(): ?string
+    {
+        if ($this->active) {
+            return $this->active;
+        }
+
+        $resolver = $this->config->get('themes.active_resolver');
+
+        if (is_callable($resolver)) {
+            $resolved = $resolver();
+
+            if (is_string($resolved) && $resolved !== '') {
+                return $resolved;
+            }
+        }
+
+        $configured = $this->config->get('themes.active');
+
+        return is_string($configured) && $configured !== '' ? $configured : null;
+    }
+
+    public function getExplicitActive(): ?string
+    {
+        return $this->active;
+    }
+
+    public function setActive(string $theme): self
+    {
+        if (! $this->registry->exists($theme)) {
+            throw new ThemeNotFoundException("Theme [{$theme}] does not exist.");
+        }
+
+        $previous = $this->active;
+        $this->active = $theme;
+        $this->bootTheme($theme);
+
+        if ($previous !== $theme) {
+            $this->dispatch(new ThemeActivated($theme, $previous));
+        }
+
+        return $this;
+    }
+
+    public function bootTheme(?string $theme = null): void
+    {
+        $theme = $theme ?? $this->getActive();
+
+        if (! is_string($theme) || $theme === '' || isset($this->bootedThemes[$theme])) {
+            return;
+        }
+
+        if (! $this->registry->exists($theme)) {
+            return;
+        }
+
+        $bootFile = (string) $this->config->get('themes.boot_file', 'functions.php');
+        $path = $this->registry->getThemePath($theme).$bootFile;
+
+        if ($this->files->exists($path)) {
+            require_once $path;
+        }
+
+        $this->bootedThemes[$theme] = true;
+        $this->dispatch(new ThemeBooted($theme));
+    }
+
+    public function getLayout(): ?string
+    {
+        return $this->layout;
+    }
+
+    public function setLayout(string $layout): self
+    {
+        $this->layout = $this->getView($layout);
+
+        return $this;
+    }
+
+    public function getView(string $view): string
+    {
+        return $this->viewResolver->resolve($view);
+    }
+
+    public function view(string $view, array $data = []): View
+    {
+        if (! is_null($this->layout)) {
+            $data['theme_layout'] = $this->getLayout();
+        }
+
+        return $this->viewFactory->make($this->getView($view), $data);
+    }
+
+    public function viewExists(string $view): bool
+    {
+        return $this->viewResolver->exists($view);
+    }
+
+    public function response(string $view, array $data = [], int $status = 200, array $headers = []): Response
+    {
+        return new Response($this->view($view, $data)->render(), $status, $headers);
+    }
+
+    public function getThemePath(string $theme): string
+    {
+        return $this->registry->getThemePath($theme);
+    }
+
+    /**
+     * @return array<int, \SplFileInfo>
+     */
+    public function getThemeFiles(?string $theme = null): array
+    {
+        $theme = $theme ?? $this->getActive();
+
+        if (! is_string($theme) || $theme === '') {
+            throw new ThemeNotFoundException('No active theme is set.');
+        }
+
+        $path = $this->registry->getThemePath($theme);
+
+        if (! $this->files->isDirectory($path)) {
+            throw new FileMissingException("Theme [{$theme}] does not exist.");
+        }
+
+        return $this->files->allFiles($path);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function manifest(string $theme): array
+    {
+        return $this->manifest->get($theme);
+    }
+
+    public function warmManifestCache(): int
+    {
+        return $this->manifest->warm();
+    }
+
+    public function clearManifestCache(): void
+    {
+        $this->manifest->flushPersistentCache();
+        $this->manifest->flushRuntimeCache();
+    }
+
+    /**
+     * @deprecated Use manifest() and read the "packages" key from theme.json instead.
+     *
+     * @return array<string, mixed>
+     */
+    public function getFunctionJsonContents(string $theme): array
+    {
+        $manifest = $this->manifest($theme);
+
+        if (isset($manifest['packages']) && is_array($manifest['packages'])) {
+            return ['packages' => $manifest['packages']];
+        }
+
+        $path = $this->getThemeFunctionPath($theme);
+
+        if (! $this->files->exists($path)) {
+            return [];
+        }
+
+        $json = json_decode($this->files->get($path), true);
+
+        return is_array($json) ? $json : [];
+    }
+
+    /**
+     * @deprecated Use manifest() instead.
+     */
+    public function getFunctionProperty(string $theme, ?string $key = null, mixed $default = null): mixed
+    {
+        return Arr::get($this->getFunctionJsonContents($theme), $key, $default);
+    }
+
+    public function getThemeFunctionPath(string $theme): string
+    {
+        return $this->registry->getThemePath($theme).'functions.json';
+    }
+
+    public function getJsonPath(string $theme): string
+    {
+        return $this->registry->getJsonPath($theme);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getJsonContents(string $theme): array
+    {
+        return $this->manifest->getStrict($theme);
+    }
+
+    public function setJsonContents(string $theme, array $content): int|false
+    {
+        return $this->manifest->put($theme, $content);
+    }
+
+    public function getProperty(string $property, mixed $default = null): mixed
+    {
+        return $this->manifest->getProperty($property, $default);
+    }
+
+    public function setProperty(string $property, mixed $value): bool
+    {
+        return $this->manifest->setProperty($property, $value);
+    }
+
+    public function asset(string $asset): string
+    {
+        return $this->assetResolver->asset($asset);
+    }
+
+    public function secureAsset(string $asset): string
+    {
+        return $this->assetResolver->secureAsset($asset);
+    }
+
+    /**
+     * @param  array<int, string>|string  $entrypoints
+     */
+    public function vite(array|string $entrypoints, ?string $theme = null): string
+    {
+        return $this->assetResolver->vite($entrypoints, $theme);
+    }
+
+    public function mix(string $path, ?string $theme = null): string
+    {
+        return $this->assetResolver->mix($path, $theme);
+    }
+
+    protected function dispatch(object $event): void
+    {
+        $dispatcher = $this->events;
+
+        if (! $dispatcher && function_exists('app') && app()->bound('events')) {
+            $dispatcher = app('events');
+        }
+
+        $dispatcher?->dispatch($event);
+    }
 }

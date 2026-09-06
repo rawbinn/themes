@@ -1,0 +1,6 @@
+@extends('{{ slug }}::layouts.app')
+
+@section('content')
+    <h1>Welcome to {{ name }}</h1>
+    <p>Your theme is ready.</p>
+@endsection
