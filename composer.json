@@ -1,8 +1,8 @@
 {
     "name": "rawbinn/themes",
-    "version": "1.0.0",
-    "description": "Laravel 5 Themes",
-    "keywords": ["themes", "laravel", "rawbinn", "blade"],
+    "description": "A standalone theme engine for Laravel 13 - Blade namespaces, parent themes, manifests, and assets.",
+    "version": "2.0.0",
+    "keywords": ["themes", "laravel", "rawbinn", "blade", "theme-engine"],
     "license": "MIT",
     "authors": [
         {
@@ -11,15 +11,46 @@
         }
     ],
     "require": {
-        "php": ">=5.6.4",
-        "illuminate/support": "5.3.*",
-        "illuminate/filesystem": "5.3.*",
-        "illuminate/view": "5.3.*",
-        "illuminate/config": "5.3.*"
+        "php": "^8.3",
+        "illuminate/support": "^13.0",
+        "illuminate/filesystem": "^13.0",
+        "illuminate/view": "^13.0",
+        "illuminate/config": "^13.0",
+        "illuminate/console": "^13.0",
+        "illuminate/http": "^13.0",
+        "illuminate/routing": "^13.0",
+        "illuminate/cache": "^13.0"
     },
     "autoload": {
         "psr-4": {
             "Rawbinn\\Themes\\": "src/"
         }
-    }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Rawbinn\\Themes\\Tests\\": "tests/"
+        }
+    },
+    "require-dev": {
+        "orchestra/testbench": "^11.0",
+        "phpunit/phpunit": "^12.0"
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "suggest": {
+        "laravel/framework": "Required for Theme::vite() integration."
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Rawbinn\\Themes\\ThemesServiceProvider"
+            ],
+            "aliases": {
+                "Theme": "Rawbinn\\Themes\\Facades\\Theme"
+            }
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }
