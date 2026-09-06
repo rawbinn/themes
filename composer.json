@@ -1,5 +1,6 @@
 {
     "name": "rawbinn/themes",
+    "version": "1.0.0",
     "description": "Laravel 5 Themes",
     "keywords": ["themes", "laravel", "rawbinn", "blade"],
     "license": "MIT",
